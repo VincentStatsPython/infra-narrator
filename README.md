@@ -2,6 +2,8 @@
 
 A machine that writes poetry about its own health.
 
+Live: https://d28dzd8nkgz1no.cloudfront.net
+
 A small dedicated Lambda exists purely to be watched. Real controlled load is
 sent at it, quiet trickles, busy bursts, deliberate errors, and Amazon
 CloudWatch records what actually happened. On a schedule, a narrator Lambda

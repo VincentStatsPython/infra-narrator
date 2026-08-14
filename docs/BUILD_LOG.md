@@ -113,3 +113,22 @@ monitored function 1.7 minutes earlier. Real LastModified, real "shedding
 skin". The model that answered was the fallback (gemini-3.5-flash-lite); the
 primary failed silently, so the seam now logs each model failure. Step 4
 gate met.
+
+## Step 5: memory and a pulse (2026-08-14)
+
+Added `inr-poems-dev` (DynamoDB, pay per request): latest poem at pk=LATEST,
+history rows at pk=POEM keyed by timestamp, expiring after seven days. Added
+the EventBridge rule `inr-narrate-dev`, rate(15 minutes), targeting the
+narrator. Verified for real: a manual invocation wrote both rows (LATEST
+read back correctly, one history row), and `describe-rule` shows ENABLED
+with rate(15 minutes). Unattended firing gets proven in step 7 by watching
+new rows appear with nobody touching anything.
+
+The model chain earned its keep twice while testing. First the primary
+(gemini-flash-latest) hit the inherited 18 second timeout, a limit that came
+from debugging-saga's API Gateway budget; nothing in this path is behind API
+Gateway, so the primary now gets 30 seconds. Then it 503'd anyway (it has
+moods of its own), so the chain widened: gemini-flash-latest, then
+gemini-3.5-flash, then gemini-3.5-flash-lite. Every poem so far has come
+from the reliable lite model, and each record stores which model actually
+answered, so nothing needs to be taken on faith.

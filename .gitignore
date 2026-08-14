@@ -7,3 +7,4 @@ lib/*.js
 bin/*.js
 .env
 out.json
+.venv/

@@ -49,12 +49,13 @@ export class NarratorStack extends cdk.Stack {
         MONITORED_FUNCTION: props.monitored.functionName,
         GEMINI_SECRET_NAME: 'infra-narrator/gemini',
         MODEL_ID: 'gemini-flash-latest',
-        MODEL_FALLBACKS: 'gemini-3.5-flash-lite',
+        MODEL_FALLBACKS: 'gemini-3.5-flash,gemini-3.5-flash-lite',
         WINDOW_MIN: '5',
         TABLE_NAME: this.poems.tableName,
         // no API Gateway in this path, so the primary model can breathe;
         // observed: gemini-flash-latest times out at the inherited 18s
         GEMINI_TIMEOUT_S: '30',
+        GEMINI_FALLBACK_TIMEOUT_S: '12',
       },
     });
     this.poems.grantWriteData(this.narrator);

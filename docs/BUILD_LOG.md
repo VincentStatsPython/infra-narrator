@@ -63,3 +63,27 @@ possible at all.
 Observed real ranges to calibrate descriptors against: traffic 4 to 116 per
 minute; error rate 0%, 12.5%, ~38%; average duration 19 ms to 4.9 s;
 concurrency 1 to the cap of 10; throttles 0 or 16. Step 2 gate met.
+
+## Step 3: descriptors recalibrated to reality (2026-08-14)
+
+Kept the prototype's phrase pools, rebuilt every dimension against what a
+Lambda actually has: traffic = Invocations/min, capacity =
+ConcurrentExecutions against the real cap of 10, stability = error rate,
+change = minutes since last deploy (real LastModified), queue = Throttles,
+which are literally requests pressed against the ceiling and turned away.
+
+Thresholds sit between the measured conditions, not at made-up round numbers:
+quiet was 4/min so "low" ends at 12; steady was 24 so "steady" ends at 50;
+busy was ~90 so "heavy" ends at 100; incident was ~115 and lands in "flood".
+Degraded ran a real 12.5% error rate ("degraded" band is 5 to 25%); incident
+ran ~38% ("critical" is 25%+). The burst minute threw 16 real throttles, so
+"pressured" covers 6 to 20.
+
+Replayed all 11 real minutes from step 2 through the deriver
+(`scripts/replay_calibration.py`): quiet maps to STABLE with low traffic,
+steady to STABLE, busy to SURGE, degraded to STRAIN, incident to DANGER with
+flood traffic and critical stability, and the burst minute to STRAIN with a
+pressured queue at urgent capacity. Every condition we created lands in a
+distinct, sensible state. One tweak came out of the replay: the SURGE gate
+moved from 100 to 60 invocations/min because busy (~90/min, concurrency 6-7)
+is genuinely this Lambda's surge condition.

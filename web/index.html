@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infrastructure Narrator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #00ff41;
+    --amber: #ffb300;
+    --red: #ff2020;
+    --blue: #00aaff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', Courier, monospace;
+    padding: 40px 20px;
+  }
+  @keyframes ledPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes scanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
+  @keyframes cursorBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+  @keyframes glowBreathe { 0%,100% { opacity: 0.04; } 50% { opacity: 0.08; } }
+
+  .rack {
+    width: 100%;
+    max-width: 640px;
+    background: linear-gradient(180deg, #3a3a3a 0%, #2e2e2e 15%, #2a2a2a 85%, #252525 100%);
+    border-radius: 4px;
+    border: 1px solid #111;
+    box-shadow:
+      0 2px 0 #111 inset, 0 -1px 0 #555 inset,
+      1px 0 0 #444 inset, -1px 0 0 #444 inset,
+      0 20px 60px rgba(0,0,0,0.8), 0 4px 12px rgba(0,0,0,0.6);
+    position: relative;
+    overflow: hidden;
+  }
+  .rack::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: repeating-linear-gradient(90deg, transparent, transparent 2px,
+      rgba(255,255,255,0.012) 2px, rgba(255,255,255,0.012) 4px);
+  }
+  .screw {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #888, #444 60%, #333);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.05);
+    position: relative;
+  }
+  .screw::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 60%; height: 1px; background: #222;
+    transform: translate(-50%,-50%) rotate(45deg);
+  }
+  .etched {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600; letter-spacing: 0.25em;
+    font-size: 9px; color: #555; text-transform: uppercase;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 8px; border-bottom: 1px solid #1e1e1e;
+    position: relative; z-index: 1;
+  }
+  .led {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--led, var(--green));
+    box-shadow: 0 0 3px 1px color-mix(in srgb, var(--led, var(--green)) 30%, transparent);
+  }
+  .led.pulse {
+    box-shadow: 0 0 6px 2px color-mix(in srgb, var(--led, var(--green)) 55%, transparent),
+                0 0 2px 1px var(--led, var(--green));
+    animation: ledPulse 1.5s ease-in-out infinite;
+  }
+  .idstrip {
+    display: flex; justify-content: space-between;
+    padding: 4px 26px; border-bottom: 1px solid #1c1c1c;
+    position: relative; z-index: 1;
+  }
+  .screen {
+    margin: 16px 16px 8px;
+    background: #0a0c0a; border-radius: 2px; border: 2px solid #111;
+    box-shadow: inset 0 0 40px rgba(0,255,60,0.04), inset 0 2px 4px rgba(0,0,0,0.9),
+                0 1px 0 #444, 0 -1px 0 #1a1a1a;
+    position: relative; overflow: hidden; min-height: 230px; z-index: 1;
+  }
+  .screen .glow {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 40%, rgba(0,255,60,0.06) 0%, transparent 70%);
+    animation: glowBreathe 4s ease-in-out infinite;
+  }
+  .screen .scan {
+    position: absolute; left: 0; right: 0; height: 25%;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,255,60,0.025) 50%, transparent 100%);
+    animation: scanline 8s linear infinite; pointer-events: none; z-index: 2;
+  }
+  .screen .grid {
+    position: absolute; inset: 0; pointer-events: none; z-index: 1;
+    background-image: radial-gradient(circle, rgba(0,255,60,0.06) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+  .corner { position: absolute; width: 12px; height: 12px; z-index: 4; }
+  .corner.tl { top: 6px; left: 6px; border-top: 1px solid rgba(0,255,60,0.2); border-left: 1px solid rgba(0,255,60,0.2); }
+  .corner.tr { top: 6px; right: 6px; border-top: 1px solid rgba(0,255,60,0.2); border-right: 1px solid rgba(0,255,60,0.2); }
+  .corner.bl { bottom: 6px; left: 6px; border-bottom: 1px solid rgba(0,255,60,0.2); border-left: 1px solid rgba(0,255,60,0.2); }
+  .corner.br { bottom: 6px; right: 6px; border-bottom: 1px solid rgba(0,255,60,0.2); border-right: 1px solid rgba(0,255,60,0.2); }
+  .poem {
+    position: relative; z-index: 3;
+    padding: 32px 36px 36px; min-height: 230px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(0,255,60,0.88);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 15px; line-height: 1.9; letter-spacing: 0.04em;
+    text-align: center;
+    text-shadow: 0 0 12px rgba(0,255,60,0.5), 0 0 40px rgba(0,255,60,0.15);
+    white-space: pre-wrap;
+  }
+  .cursor { animation: cursorBlink 0.7s ease-in-out infinite; opacity: 0.6; }
+  .waiting { color: rgba(0,255,60,0.25); font-size: 11px; letter-spacing: 0.3em;
+             animation: cursorBlink 1s ease-in-out infinite; }
+  .telemetry {
+    margin: 0 16px 8px;
+    display: flex; flex-wrap: wrap; gap: 4px 14px;
+    justify-content: center;
+    padding: 7px 10px;
+    background: #202020; border: 1px solid #191919; border-radius: 2px;
+    position: relative; z-index: 1;
+  }
+  .telemetry span { white-space: nowrap; }
+  .telemetry .etched { font-size: 8px; color: #4a4a4a; }
+  .telemetry b {
+    font-family: 'Share Tech Mono', monospace; font-weight: 400;
+    font-size: 10px; color: #7a9a7a; margin-left: 4px;
+  }
+  .history {
+    margin: 0 16px 12px; position: relative; z-index: 1;
+  }
+  .history .entry {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 3px 10px; border-left: 2px solid #222;
+    font-family: 'Share Tech Mono', monospace; font-size: 10px;
+    color: #565656;
+  }
+  .history .entry .mood { width: 76px; letter-spacing: 0.15em; }
+  .history .entry .first { color: #4a5f4a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bottombar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px 12px; border-top: 1px solid #1e1e1e;
+    position: relative; z-index: 1;
+  }
+  .vents { display: flex; gap: 3px; }
+  .vents i {
+    width: 2px; height: 10px; background: #1e1e1e; border-radius: 1px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.03);
+  }
+</style>
+</head>
+<body>
+<div class="rack">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="screw"></div>
+      <div>
+        <div class="etched" style="font-size:8px;color:#444">INR SYSTEMS</div>
+        <div class="etched" style="font-size:10px;letter-spacing:0.3em">INFRASTRUCTURE NARRATOR</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="etched" id="statusLabel" style="font-size:8px">INIT</div>
+        <div class="led" id="moodLed"></div>
+        <div class="led" id="typeLed" style="--led:var(--green)"></div>
+      </div>
+      <div class="screw"></div>
+    </div>
+  </div>
+
+  <div class="idstrip">
+    <div class="etched" style="font-size:7px;color:#3a3a3a" id="modstrip">MOD: INR-7 · REV: C</div>
+    <div class="etched" style="font-size:7px;color:#3a3a3a" id="regionstrip">us-east-1</div>
+  </div>
+
+  <div class="screen">
+    <div class="glow"></div>
+    <div class="scan"></div>
+    <div class="grid"></div>
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+    <div class="poem" id="poem"><span class="waiting">&#9610;</span></div>
+  </div>
+
+  <div class="telemetry" id="telemetry" hidden>
+    <span><span class="etched">INV/MIN</span><b id="tInv">-</b></span>
+    <span><span class="etched">ERR</span><b id="tErr">-</b></span>
+    <span><span class="etched">THROTTLE</span><b id="tThr">-</b></span>
+    <span><span class="etched">DUR</span><b id="tDur">-</b></span>
+    <span><span class="etched">CONC</span><b id="tConc">-</b></span>
+    <span><span class="etched">MODEL</span><b id="tModel">-</b></span>
+    <span><span class="etched">AT</span><b id="tAt">-</b></span>
+  </div>
+
+  <div class="history" id="history" hidden></div>
+
+  <div class="bottombar">
+    <div class="screw"></div>
+    <div class="vents">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="screw"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+  // Real telemetry only: this page reads what the narrator stored and never
+  // triggers generation. EventBridge owns the schedule.
+  const POLL_MS = 60000;
+  const TYPE_MS = 28;
+
+  const MOODS = {
+    STABLE:   { label: 'NOMINAL',  led: 'var(--green)', pulse: false },
+    IDLE:     { label: 'IDLE',     led: 'var(--green)', pulse: false },
+    SURGE:    { label: 'SURGE',    led: 'var(--blue)',  pulse: false },
+    RECOVERY: { label: 'RECOVERY', led: 'var(--blue)',  pulse: false },
+    STRAIN:   { label: 'DEGRADED', led: 'var(--amber)', pulse: true  },
+    DANGER:   { label: 'ALERT',    led: 'var(--red)',   pulse: true  },
+  };
+
+  let shownAt = null;
+  let typeTimer = null;
+
+  function typePoem(text) {
+    const el = document.getElementById('poem');
+    const typeLed = document.getElementById('typeLed');
+    clearInterval(typeTimer);
+    let i = 0;
+    typeLed.classList.add('pulse');
+    typeTimer = setInterval(() => {
+      i++;
+      if (i >= text.length) {
+        clearInterval(typeTimer);
+        typeLed.classList.remove('pulse');
+        el.textContent = text;
+        return;
+      }
+      el.innerHTML = '';
+      el.appendChild(document.createTextNode(text.slice(0, i)));
+      const c = document.createElement('span');
+      c.className = 'cursor';
+      c.textContent = '▊';
+      el.appendChild(c);
+    }, TYPE_MS);
+  }
+
+  function render(data) {
+    const rec = data.latest;
+    if (!rec) return;
+
+    const mood = MOODS[rec.mood] || MOODS.STABLE;
+    document.getElementById('statusLabel').textContent = mood.label;
+    const led = document.getElementById('moodLed');
+    led.style.setProperty('--led', mood.led);
+    led.classList.toggle('pulse', mood.pulse);
+
+    const m = rec.metrics || {};
+    document.getElementById('tInv').textContent = (m.invocations_per_min ?? 0).toFixed(1);
+    document.getElementById('tErr').textContent = ((m.error_rate ?? 0) * 100).toFixed(1) + '%';
+    document.getElementById('tThr').textContent = m.throttles ?? 0;
+    document.getElementById('tDur').textContent = Math.round(m.avg_duration_ms ?? 0) + 'ms';
+    document.getElementById('tConc').textContent = m.max_concurrent ?? 0;
+    document.getElementById('tModel').textContent = rec.model || '-';
+    document.getElementById('tAt').textContent = (rec.generated_at || '').replace('T', ' ').slice(5, 16) + 'Z';
+    document.getElementById('telemetry').hidden = false;
+
+    const histEl = document.getElementById('history');
+    const past = (data.history || []).filter(h => h.generated_at !== rec.generated_at).slice(0, 3);
+    histEl.innerHTML = '';
+    past.forEach(h => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      const t = document.createElement('span');
+      t.textContent = (h.generated_at || '').slice(11, 16);
+      const mo = document.createElement('span');
+      mo.className = 'mood';
+      mo.textContent = (MOODS[h.mood] || {}).label || h.mood;
+      const fl = document.createElement('span');
+      fl.className = 'first';
+      fl.textContent = (h.poem || '').split('\n')[0];
+      row.append(t, mo, fl);
+      histEl.appendChild(row);
+    });
+    histEl.hidden = past.length === 0;
+
+    if (rec.generated_at !== shownAt) {
+      shownAt = rec.generated_at;
+      const sn = String((data.history || []).length).padStart(4, '0');
+      document.getElementById('modstrip').textContent = 'MOD: INR-7 · REV: C · SN: 00' + sn;
+      typePoem(rec.poem || '');
+    }
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch(window.INR_API_BASE + 'poem');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      render(await res.json());
+    } catch (err) {
+      if (!shownAt) {
+        document.getElementById('poem').innerHTML =
+          '<span class="waiting">SIGNAL LOST · RETRYING</span>';
+      }
+    }
+  }
+
+  refresh();
+  setInterval(refresh, POLL_MS);
+</script>
+</body>
+</html>

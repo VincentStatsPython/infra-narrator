@@ -1,0 +1,9 @@
+node_modules/
+cdk.out/
+cdk-outputs.json
+__pycache__/
+*.d.ts
+lib/*.js
+bin/*.js
+.env
+out.json

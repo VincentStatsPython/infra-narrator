@@ -2,6 +2,7 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { MonitoredStack } from '../lib/monitored-stack';
+import { NarratorStack } from '../lib/narrator-stack';
 
 const app = new cdk.App();
 
@@ -16,7 +17,12 @@ const env: cdk.Environment = {
 const prefix = `inr-${stage}`;
 
 // The subject of every poem: a tiny Lambda that exists to be watched.
-new MonitoredStack(app, `${prefix}-monitored`, { env, stage });
+const monitored = new MonitoredStack(app, `${prefix}-monitored`, { env, stage });
+
+// The poet: reads the subject's real metrics, asks Gemini for a poem.
+new NarratorStack(app, `${prefix}-narrator`, {
+  env, stage, monitored: monitored.heartbeat,
+});
 
 cdk.Tags.of(app).add('project', 'infra-narrator');
 cdk.Tags.of(app).add('stage', stage);

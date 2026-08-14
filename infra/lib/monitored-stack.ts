@@ -13,8 +13,11 @@ interface MonitoredStackProps extends cdk.StackProps {
  * modes (ok / slow / error) to create genuine quiet, busy, degraded and
  * erroring conditions for the narrator to read.
  *
- * Reserved concurrency is deliberately tiny (5) so a real burst from the
- * load generator can produce real Throttles, not just Invocations.
+ * No reserved concurrency: this account's total Lambda concurrency is capped
+ * at 10, so reservations are impossible (they would drop the unreserved pool
+ * below its minimum of 10). The cap works in our favour anyway - a real burst
+ * of slow concurrent invocations hits the account ceiling and produces real
+ * Throttles without any reservation.
  */
 export class MonitoredStack extends cdk.Stack {
   public readonly heartbeat: lambda.Function;
@@ -30,7 +33,6 @@ export class MonitoredStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambdas')),
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
-      reservedConcurrentExecutions: 5,
     });
 
     new cdk.CfnOutput(this, 'HeartbeatFunctionName', { value: this.heartbeat.functionName });

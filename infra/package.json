@@ -1,7 +1,7 @@
 {
   "name": "inr-infra",
   "version": "1.0.0",
-  "description": "Infrastructure Narrator — infrastructure as code (AWS CDK)",
+  "description": "Infrastructure Narrator, infrastructure as code (AWS CDK)",
   "bin": { "inr": "bin/app.js" },
   "scripts": {
     "build": "tsc",

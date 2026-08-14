@@ -52,6 +52,9 @@ export class NarratorStack extends cdk.Stack {
         MODEL_FALLBACKS: 'gemini-3.5-flash-lite',
         WINDOW_MIN: '5',
         TABLE_NAME: this.poems.tableName,
+        // no API Gateway in this path, so the primary model can breathe;
+        // observed: gemini-flash-latest times out at the inherited 18s
+        GEMINI_TIMEOUT_S: '30',
       },
     });
     this.poems.grantWriteData(this.narrator);

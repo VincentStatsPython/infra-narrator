@@ -3,6 +3,8 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { MonitoredStack } from '../lib/monitored-stack';
 import { NarratorStack } from '../lib/narrator-stack';
+import { ApiStack } from '../lib/api-stack';
+import { HostingStack } from '../lib/hosting-stack';
 
 const app = new cdk.App();
 
@@ -20,9 +22,17 @@ const prefix = `inr-${stage}`;
 const monitored = new MonitoredStack(app, `${prefix}-monitored`, { env, stage });
 
 // The poet: reads the subject's real metrics, asks Gemini for a poem.
-new NarratorStack(app, `${prefix}-narrator`, {
+const narrator = new NarratorStack(app, `${prefix}-narrator`, {
   env, stage, monitored: monitored.heartbeat,
 });
+
+// Read-only window into the poems for the frontend.
+const api = new ApiStack(app, `${prefix}-api`, {
+  env, stage, poems: narrator.poems,
+});
+
+// The rack unit itself: S3 + CloudFront.
+new HostingStack(app, `${prefix}-hosting`, { env, stage, apiUrl: api.api.url });
 
 cdk.Tags.of(app).add('project', 'infra-narrator');
 cdk.Tags.of(app).add('stage', stage);

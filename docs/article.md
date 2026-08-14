@@ -142,4 +142,4 @@ been quietly keeping a diary. That was the goal.
 ## Link to App or Repo
 
 - Live app: https://d28dzd8nkgz1no.cloudfront.net
-- Source: REPO_URL_PLACEHOLDER
+- Source: https://github.com/VincentStatsPython/infra-narrator

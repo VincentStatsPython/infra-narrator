@@ -118,6 +118,7 @@ def generate_poem(mood: str, descriptors: dict) -> dict:
         try:
             raw = _call_gemini(prompt, key, model_id, timeout)
         except Exception as exc:  # noqa: BLE001 - try the next model
+            print(f"model {model_id} failed: {type(exc).__name__}: {exc}")
             last_err = exc
             continue
         poem = (raw.get("poem") or "").strip()

@@ -2,6 +2,9 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as path from 'path';
 
 interface NarratorStackProps extends cdk.StackProps {
@@ -16,9 +19,21 @@ interface NarratorStackProps extends cdk.StackProps {
  */
 export class NarratorStack extends cdk.Stack {
   public readonly narrator: lambda.Function;
+  public readonly poems: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: NarratorStackProps) {
     super(scope, id, props);
+
+    // Latest poem lives at pk=LATEST; history rows are pk=POEM, sk=timestamp
+    // and expire after a week so the table cannot quietly accumulate.
+    this.poems = new dynamodb.Table(this, 'Poems', {
+      tableName: `inr-poems-${props.stage}`,
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'expires_at',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
     this.narrator = new lambda.Function(this, 'Narrator', {
       functionName: `inr-narrator-${props.stage}`,
@@ -36,7 +51,16 @@ export class NarratorStack extends cdk.Stack {
         MODEL_ID: 'gemini-flash-latest',
         MODEL_FALLBACKS: 'gemini-3.5-flash-lite',
         WINDOW_MIN: '5',
+        TABLE_NAME: this.poems.tableName,
       },
+    });
+    this.poems.grantWriteData(this.narrator);
+
+    // The whole point: the machine reports on itself, unattended.
+    new events.Rule(this, 'NarrateSchedule', {
+      ruleName: `inr-narrate-${props.stage}`,
+      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
+      targets: [new targets.LambdaFunction(this.narrator)],
     });
 
     // GetMetricData takes no resource-level scoping; the reads stay honest.

@@ -87,3 +87,29 @@ pressured queue at urgent capacity. Every condition we created lands in a
 distinct, sensible state. One tweak came out of the replay: the SURGE gate
 moved from 100 to 60 invocations/min because busy (~90/min, concurrency 6-7)
 is genuinely this Lambda's surge condition.
+
+## Step 4: the narrator speaks, end to end (2026-08-14)
+
+Deployed `inr-narrator-dev`: reads the heartbeat's real per-minute CloudWatch
+metrics (GetMetricData, anchored on the newest minute with data because
+delivery lags), gets deploy recency from the function's real LastModified,
+derives descriptors and mood, calls Gemini with the key from Secrets Manager
+(`infra-narrator/gemini`), structured JSON out. No deterministic fallback
+poem exists anywhere; if all models fail the invocation fails honestly.
+
+First real poem, 06:04:18Z, from a genuinely idle system (the load run had
+ended twelve minutes earlier, all metrics truly zero):
+
+    The tide withdraws and leaves the shore,
+    No heavy currents push no more.
+    The settling dust begins to sleep,
+    As quiet chambers sink and keep.
+    I shed the past and wear the chill,
+    A cooling metal, small and still.
+
+The mood came out RECOVERY, not IDLE, and that was true: both functions
+share one code asset, so deploying the narrator had genuinely redeployed the
+monitored function 1.7 minutes earlier. Real LastModified, real "shedding
+skin". The model that answered was the fallback (gemini-3.5-flash-lite); the
+primary failed silently, so the seam now logs each model failure. Step 4
+gate met.

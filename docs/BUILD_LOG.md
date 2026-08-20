@@ -221,3 +221,32 @@ hides, and a note under the buttons names the source of the numbers. LIVE
 returns to the scheduled poem. Deployed and serving; the page itself was not
 opened in a browser this time, the Chrome extension was not connected, so
 the panel behaviour is verified only by the API responses and a syntax check.
+
+## Step 9: the voice matures (2026-08-21) — AWS Builder Center "Set Your
+## Creative App Free" weekend
+
+For the always-on-agent follow-up challenge, the machine now genuinely
+remembers itself. `poem_count` lives at `pk=META, sk=VOICE`, an un-TTL'd
+DynamoDB counter incremented only after a poem is actually written, so it
+never counts a failed attempt and never resets with the 7-day history TTL.
+Before writing, the narrator now reads that count plus its own last 6 real
+poems, pulls distinctive words out of them, and tells the model both: how
+many times it has spoken before (mapped to a voice stage: waking under 10,
+finding its voice 10-39, seasoned at 40+) and which words it reached for
+recently, so it looks for new ones. `narrator-stack.ts` needed one real
+permission change: the table grant went from write-only to read-write.
+
+Verified with 41 real, separately stored poems, not a mock: poem 1 (waking)
+is plain and short - "I do not shake, I do not strain, / The heavy water
+leaves no pain." Poem 10, the instant it crossed into "finding its voice",
+reached for an extended, personified image unprompted by anything in the
+metrics - "The tide withdraws its pale and drifting hand." Poem 41, the
+first at "seasoned", did something none of the earlier ones did: it named
+its own repetition - "A familiar descent into shadow and snow" - exactly
+the behaviour the seasoned-stage instruction asks for, and it said so in
+its own words, not mine. At the real 15-minute schedule this is roughly
+2.5 hours to "finding its voice" and 10 hours to "seasoned", both reachable
+inside the judging window without any manual invocation once left running.
+The 41 poems above were produced by direct Lambda invokes to gather the
+evidence quickly; the schedule has been running unattended since deploy
+and will keep adding to the same real count.

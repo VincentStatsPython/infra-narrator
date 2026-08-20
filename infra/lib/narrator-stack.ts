@@ -58,7 +58,9 @@ export class NarratorStack extends cdk.Stack {
         GEMINI_FALLBACK_TIMEOUT_S: '12',
       },
     });
-    this.poems.grantWriteData(this.narrator);
+    // Read is new: the narrator now consults its own history (poem count,
+    // recent imagery) to let its voice mature over time.
+    this.poems.grantReadWriteData(this.narrator);
 
     // The whole point: the machine reports on itself, unattended.
     new events.Rule(this, 'NarrateSchedule', {

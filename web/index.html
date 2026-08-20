@@ -243,6 +243,8 @@
     <span><span class="etched">CONC</span><b id="tConc">-</b></span>
     <span><span class="etched">MODEL</span><b id="tModel">-</b></span>
     <span><span class="etched">AT</span><b id="tAt">-</b></span>
+    <span><span class="etched">VOICE</span><b id="tVoice">-</b></span>
+    <span><span class="etched">POEMS</span><b id="tPoems">-</b></span>
   </div>
 
   <div class="simbar">
@@ -329,6 +331,8 @@
     document.getElementById('tConc').textContent = m.max_concurrent ?? 0;
     document.getElementById('tModel').textContent = rec.model || '-';
     document.getElementById('tAt').textContent = (rec.generated_at || '').replace('T', ' ').slice(5, 16) + 'Z';
+    document.getElementById('tVoice').textContent = rec.voice_stage || '-';
+    document.getElementById('tPoems').textContent = rec.poem_count ?? '-';
     document.getElementById('telemetry').hidden = false;
 
     document.getElementById('screen').classList.toggle('sim', isSim);

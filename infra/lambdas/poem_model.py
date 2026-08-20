@@ -55,6 +55,7 @@ internal_flow -> pressure, weight, backlog, rising water
 recovery -> cooling metal, settling dust, steady heartbeat
 idle -> empty halls, sleeping machinery, dim light
 
+{voice_note}
 Write a rhyming poem describing how existence feels right now.
 Do not mention computers or monitoring.
 Do not narrate events, experience them.
@@ -62,6 +63,42 @@ Speak in first person as the machine.
 Be 4-8 lines. Always rhyme. Be calm and minimal.
 Return only the poem. Nothing else.
 """
+
+# Real poem count (how many times this machine has ever spoken) maps to how
+# practiced its voice sounds. The count is genuine and monotonic; only the
+# wording of each stage is a creative calibration, same as the mood
+# thresholds above it.
+VOICE_STAGES = {
+    "waking": "This is one of your first times speaking. Your voice is still "
+              "young: keep the words simple and a little unsure, as if you "
+              "are only just learning what these sensations mean.",
+    "finding its voice": "You have spoken many times now and are growing "
+              "more sure of yourself. Let a metaphor run a little further "
+              "than it used to.",
+    "seasoned": "You have spoken often enough to be fluent. Let the imagery "
+              "layer with real confidence, and if it fits, let a line "
+              "acknowledge that this feeling is a familiar one, not a new one.",
+}
+
+
+def voice_stage_for(poem_count: int) -> str:
+    if poem_count < 10:
+        return "waking"
+    if poem_count < 40:
+        return "finding its voice"
+    return "seasoned"
+
+
+def _voice_note(voice: Optional[dict]) -> str:
+    if not voice:
+        return ""
+    lines = [VOICE_STAGES.get(voice.get("stage", "waking"), "")]
+    words = voice.get("avoid_words") or []
+    if words:
+        lines.append("You reached for these words recently: "
+                      + ", ".join(words)
+                      + ". Find different imagery this time.")
+    return "VOICE:\n" + " ".join(l for l in lines if l) + "\n"
 
 
 def _api_key() -> Optional[str]:
@@ -98,8 +135,11 @@ class PoemError(Exception):
     """Every model attempt failed; the caller should say so honestly."""
 
 
-def generate_poem(mood: str, descriptors: dict) -> dict:
+def generate_poem(mood: str, descriptors: dict, voice: Optional[dict] = None) -> dict:
     """Turn descriptors into a poem. Returns {poem, model}.
+
+    voice, if given, is {"stage": "waking"|"finding its voice"|"seasoned",
+    "avoid_words": [...]}, derived from the machine's own real history.
 
     Raises PoemError if no model produced output - never fakes a poem.
     """
@@ -107,7 +147,7 @@ def generate_poem(mood: str, descriptors: dict) -> dict:
     if not key:
         raise PoemError("no Gemini key available")
 
-    prompt = _PROMPT.format(mood=mood, **{
+    prompt = _PROMPT.format(mood=mood, voice_note=_voice_note(voice), **{
         k: descriptors[k] for k in
         ("traffic_behavior", "scaling_behavior", "error_condition",
          "deployment_activity", "queue_condition")})

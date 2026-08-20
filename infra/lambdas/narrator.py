@@ -9,17 +9,27 @@ from CloudWatch, deploy recency from the function's real LastModified.
 
 import json
 import os
+import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import boto3
+from boto3.dynamodb.conditions import Key
 
 from descriptors import derive, derive_mood
-from poem_model import PoemError, generate_poem
+from poem_model import PoemError, generate_poem, voice_stage_for
 
 MONITORED_FUNCTION = os.environ.get("MONITORED_FUNCTION", "inr-monitored-dev")
 WINDOW_MIN = int(os.environ.get("WINDOW_MIN", "5"))
 TABLE_NAME = os.environ.get("TABLE_NAME", "")
 HISTORY_KEEP_DAYS = 7
+VOICE_HISTORY_LOOKBACK = 6
+STOPWORDS = {
+    "the", "and", "with", "that", "this", "from", "have", "your", "into",
+    "still", "even", "than", "what", "when", "where", "here", "there",
+    "while", "through", "beneath", "within", "without", "does", "are",
+    "was", "were", "been", "being",
+}
 
 
 def _metric_query(qid, metric, stat):
@@ -101,6 +111,45 @@ def minutes_since_deploy():
     return (datetime.now(timezone.utc) - last).total_seconds() / 60.0
 
 
+def recent_words(table, limit=VOICE_HISTORY_LOOKBACK):
+    """Distinctive words from the machine's own last few real poems.
+
+    Real history in, nothing invented: only used to steer the model away
+    from imagery it has already spent recently.
+    """
+    if not table:
+        return []
+    items = table.query(
+        KeyConditionExpression=Key("pk").eq("POEM"),
+        ScanIndexForward=False,
+        Limit=limit,
+    )["Items"]
+    words = Counter()
+    for item in items:
+        poem = json.loads(item["body"]).get("poem", "")
+        for w in re.findall(r"[a-zA-Z']+", poem.lower()):
+            if len(w) > 4 and w not in STOPWORDS:
+                words[w] += 1
+    return [w for w, _ in words.most_common(8)]
+
+
+def bump_voice_count(table):
+    """Atomically increments the real, un-TTL'd count of poems ever written.
+
+    Called only after a poem is actually written, so the count never counts
+    a failed attempt. Returns the new total.
+    """
+    if not table:
+        return 0
+    resp = table.update_item(
+        Key={"pk": "META", "sk": "VOICE"},
+        UpdateExpression="ADD poem_count :inc",
+        ExpressionAttributeValues={":inc": 1},
+        ReturnValues="UPDATED_NEW",
+    )
+    return int(resp["Attributes"]["poem_count"])
+
+
 def store(record):
     if not TABLE_NAME:
         return
@@ -121,12 +170,28 @@ def handler(event, context):
     derived = derive(metrics)
     mood = derive_mood(metrics)
 
+    table = boto3.resource("dynamodb").Table(TABLE_NAME) if TABLE_NAME else None
+    # Real history in: how many times has this machine actually spoken
+    # before, and what did it just say. Only used to steer the next poem,
+    # never to invent facts about the system.
+    prior_count = 0
+    words = []
+    if table:
+        meta = table.get_item(Key={"pk": "META", "sk": "VOICE"}).get("Item")
+        prior_count = int(meta["poem_count"]) if meta else 0
+        words = recent_words(table)
+    voice_stage = voice_stage_for(prior_count + 1)
+
     try:
-        result = generate_poem(mood, derived)
+        result = generate_poem(mood, derived,
+                                voice={"stage": voice_stage, "avoid_words": words})
     except PoemError as exc:
         # No poem is better than a fake poem. Fail loudly for the schedule's
         # error metric and leave the last real poem in place for readers.
         raise RuntimeError(f"poem generation failed: {exc}") from exc
+
+    # Only a genuinely written poem increments the count.
+    poem_count = bump_voice_count(table) if table else prior_count + 1
 
     record = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -140,6 +205,8 @@ def handler(event, context):
         "poem": result["poem"],
         "model": result["model"],
         "subject": MONITORED_FUNCTION,
+        "voice_stage": voice_stage,
+        "poem_count": poem_count,
     }
     store(record)
     return record

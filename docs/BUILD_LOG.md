@@ -182,3 +182,42 @@ pulsing, telemetry strip showing ERR 36.5%, THROTTLE 8, CONC 10, and the
 poem typing itself out. Screenshot in docs/screenshots/. The system now
 runs itself: EventBridge every fifteen minutes, poems accumulating in
 DynamoDB, frontend reading quietly. Step 7 gate met, build order complete.
+
+## Step 8: the condition selector (2026-08-17)
+
+The schedule only ever describes the present, and the present is usually
+quiet, so most visitors meet the machine at its most boring. The simulator
+fixes that without lying about it: three buttons on the panel, STABLE,
+UNSTABLE and RECOVERING, each one replaying a condition and asking the same
+model, through the same descriptor pool and the same prompt, what existence
+feels like from inside it.
+
+The numbers behind the buttons are not invented. Stable and unstable replay
+real per-minute CloudWatch data recorded from inr-monitored-dev during the
+step 2 calibration run, one real minute picked per press: the steady minutes
+at 24/min with zero errors, and the incident minutes at ~38 percent real
+errors plus the burst minute with its 16 real throttles. Recovering is the
+one state the calibration run never captured, because the load generator
+stopped rather than tapered, so it is composed from the measured endpoints
+instead, and every response says so with `composed: true`.
+
+Verified live against all three states: stable read STABLE and wrote "a
+steady wind moves through my quiet halls"; unstable read DANGER and wrote
+"while sparks ignite the broken freight"; recovering read RECOVERY and wrote
+"and cool the metal rests today", cooling metal being exactly the recovery
+metaphor the prompt maps. An unknown state returns 400.
+
+POST /simulate is the only route in this system that can spend model quota,
+so it is fenced three ways: a fixed set of three states, a 45 second
+per-state cooldown served from DynamoDB (a repeat press inside the window
+replays the poem already written and comes back `cached: true`), and API
+Gateway's existing throttle above that. Simulated poems are written under
+pk=SIM, never pk=POEM, so the real history stays real, and GET /poem was
+checked afterwards to confirm: twelve rows, none of them simulated.
+
+The panel makes the difference impossible to miss. In simulation the screen
+frame turns amber, a SIMULATION tag sits above the poem, the live history
+hides, and a note under the buttons names the source of the numbers. LIVE
+returns to the scheduled poem. Deployed and serving; the page itself was not
+opened in a browser this time, the Chrome extension was not connected, so
+the panel behaviour is verified only by the API responses and a syntax check.

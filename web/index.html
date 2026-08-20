@@ -138,6 +138,45 @@
     font-family: 'Share Tech Mono', monospace; font-weight: 400;
     font-size: 10px; color: #7a9a7a; margin-left: 4px;
   }
+  .simbar {
+    margin: 0 16px 8px; padding: 8px 10px;
+    background: #202020; border: 1px solid #191919; border-radius: 2px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    position: relative; z-index: 1;
+  }
+  .simbar > .etched { font-size: 8px; color: #4a4a4a; margin-right: 2px; }
+  .simbtn {
+    flex: 1 1 auto; min-width: 74px;
+    font-family: 'Rajdhani', sans-serif; font-weight: 600;
+    letter-spacing: 0.18em; font-size: 9px; text-transform: uppercase;
+    color: #7a7a7a; cursor: pointer;
+    padding: 6px 8px; border-radius: 2px;
+    background: linear-gradient(180deg, #333 0%, #2a2a2a 100%);
+    border: 1px solid #151515;
+    box-shadow: 0 1px 0 #444 inset, 0 -1px 0 #1a1a1a inset, 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .simbtn:hover:not(:disabled) { color: #a8a8a8; }
+  .simbtn:disabled { cursor: default; opacity: 0.55; }
+  .simbtn.on {
+    color: #0d0d0d;
+    background: linear-gradient(180deg, var(--sim, var(--amber)) 0%,
+                color-mix(in srgb, var(--sim, var(--amber)) 72%, #000) 100%);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--sim, var(--amber)) 45%, transparent),
+                0 1px 2px rgba(0,0,0,0.7) inset;
+  }
+  .simnote {
+    flex: 1 0 100%; font-family: 'Share Tech Mono', monospace;
+    font-size: 9px; color: #565656; letter-spacing: 0.04em;
+  }
+  .screen.sim { box-shadow: inset 0 0 40px rgba(255,179,0,0.05),
+                            inset 0 2px 4px rgba(0,0,0,0.9),
+                            0 1px 0 #444, 0 -1px 0 #1a1a1a; }
+  .screen.sim .corner { border-color: rgba(255,179,0,0.35) !important; }
+  .simtag {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    z-index: 5; font-family: 'Rajdhani', sans-serif; font-weight: 600;
+    font-size: 8px; letter-spacing: 0.35em; color: rgba(255,179,0,0.6);
+  }
   .history {
     margin: 0 16px 12px; position: relative; z-index: 1;
   }
@@ -186,12 +225,13 @@
     <div class="etched" style="font-size:7px;color:#3a3a3a" id="regionstrip">us-east-1</div>
   </div>
 
-  <div class="screen">
+  <div class="screen" id="screen">
     <div class="glow"></div>
     <div class="scan"></div>
     <div class="grid"></div>
     <div class="corner tl"></div><div class="corner tr"></div>
     <div class="corner bl"></div><div class="corner br"></div>
+    <div class="simtag" id="simtag" hidden>SIMULATION</div>
     <div class="poem" id="poem"><span class="waiting">&#9610;</span></div>
   </div>
 
@@ -203,6 +243,15 @@
     <span><span class="etched">CONC</span><b id="tConc">-</b></span>
     <span><span class="etched">MODEL</span><b id="tModel">-</b></span>
     <span><span class="etched">AT</span><b id="tAt">-</b></span>
+  </div>
+
+  <div class="simbar">
+    <span class="etched">CONDITION</span>
+    <button class="simbtn on" id="simLive" data-state="" style="--sim:var(--green)">Live</button>
+    <button class="simbtn" data-state="stable" style="--sim:var(--green)">Stable</button>
+    <button class="simbtn" data-state="unstable" style="--sim:var(--red)">Unstable</button>
+    <button class="simbtn" data-state="recovering" style="--sim:var(--blue)">Recovering</button>
+    <span class="simnote" id="simNote">live: the machine speaks about right now</span>
   </div>
 
   <div class="history" id="history" hidden></div>
@@ -233,8 +282,11 @@
     DANGER:   { label: 'ALERT',    led: 'var(--red)',   pulse: true  },
   };
 
-  let shownAt = null;
   let typeTimer = null;
+  let lastKey = null;    // what is currently typed on the screen
+  let liveData = null;   // newest real payload, kept so LIVE can restore it
+  let simState = null;   // null while the panel is showing real telemetry
+  let simBusy = false;
 
   function typePoem(text) {
     const el = document.getElementById('poem');
@@ -259,10 +311,10 @@
     }, TYPE_MS);
   }
 
-  function render(data) {
-    const rec = data.latest;
-    if (!rec) return;
-
+  // Paints the panel from one record, real or simulated. The amber frame and
+  // the SIMULATION tag are the only difference, and they are not optional:
+  // a replayed condition must never read as the machine's present state.
+  function paint(rec, isSim) {
     const mood = MOODS[rec.mood] || MOODS.STABLE;
     document.getElementById('statusLabel').textContent = mood.label;
     const led = document.getElementById('moodLed');
@@ -279,6 +331,11 @@
     document.getElementById('tAt').textContent = (rec.generated_at || '').replace('T', ' ').slice(5, 16) + 'Z';
     document.getElementById('telemetry').hidden = false;
 
+    document.getElementById('screen').classList.toggle('sim', isSim);
+    document.getElementById('simtag').hidden = !isSim;
+  }
+
+  function renderHistory(data, rec) {
     const histEl = document.getElementById('history');
     const past = (data.history || []).filter(h => h.generated_at !== rec.generated_at).slice(0, 3);
     histEl.innerHTML = '';
@@ -297,22 +354,89 @@
       histEl.appendChild(row);
     });
     histEl.hidden = past.length === 0;
+  }
 
-    if (rec.generated_at !== shownAt) {
-      shownAt = rec.generated_at;
+  function renderLive(data) {
+    liveData = data;
+    if (simState) return;
+    const rec = data.latest;
+    if (!rec) return;
+
+    paint(rec, false);
+    renderHistory(data, rec);
+
+    const key = 'live:' + rec.generated_at;
+    if (key !== lastKey) {
+      lastKey = key;
       const sn = String((data.history || []).length).padStart(4, '0');
       document.getElementById('modstrip').textContent = 'MOD: INR-7 · REV: C · SN: 00' + sn;
       typePoem(rec.poem || '');
     }
   }
 
+  const buttons = [...document.querySelectorAll('.simbtn')];
+
+  function select(state) {
+    buttons.forEach(b => b.classList.toggle('on', b.dataset.state === state));
+    buttons.forEach(b => { b.disabled = simBusy; });
+  }
+
+  async function simulate(state) {
+    if (simBusy) return;
+    simState = state || null;
+    select(state);
+
+    if (!simState) {
+      lastKey = null;
+      document.getElementById('simNote').textContent =
+        'live: the machine speaks about right now';
+      if (liveData) renderLive(liveData); else refresh();
+      return;
+    }
+
+    simBusy = true;
+    select(state);
+    clearInterval(typeTimer);
+    document.getElementById('poem').innerHTML = '<span class="waiting">COMPOSING</span>';
+    document.getElementById('simNote').textContent = state + ': replaying the condition';
+
+    try {
+      const res = await fetch(window.INR_API_BASE + 'simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state }),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const rec = await res.json();
+      if (simState !== state) return;   // the reader moved on while we waited
+
+      paint(rec, true);
+      document.getElementById('history').hidden = true;
+      document.getElementById('simNote').textContent =
+        state + ' · ' + (rec.composed ? 'composed, ' : 'real minute replayed from ')
+        + rec.source + (rec.cached ? ' · held' : '');
+      lastKey = 'sim:' + state + ':' + rec.generated_at;
+      typePoem(rec.poem || '');
+    } catch (err) {
+      document.getElementById('poem').innerHTML =
+        '<span class="waiting">SIMULATION UNAVAILABLE</span>';
+      document.getElementById('simNote').textContent =
+        state + ': could not reach the narrator';
+    } finally {
+      simBusy = false;
+      select(simState || '');
+    }
+  }
+
+  buttons.forEach(b => b.addEventListener('click', () => simulate(b.dataset.state)));
+
   async function refresh() {
     try {
       const res = await fetch(window.INR_API_BASE + 'poem');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      render(await res.json());
+      renderLive(await res.json());
     } catch (err) {
-      if (!shownAt) {
+      if (!lastKey && !simState) {
         document.getElementById('poem').innerHTML =
           '<span class="waiting">SIGNAL LOST · RETRYING</span>';
       }
